@@ -1,0 +1,4 @@
+title = "demo fixtures with default rules and no allowlist"
+
+[extend]
+useDefault = true

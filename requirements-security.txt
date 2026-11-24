@@ -1,0 +1,6 @@
+# Index of scanner Python dependencies. Do not install this file into the app venv:
+# checkov pulls older packaging and OpenTelemetry than FastAPI. The install script
+# puts sast, sca, and iac into separate virtualenvs.
+-r requirements-sast.txt
+-r requirements-sca.txt
+-r requirements-iac.txt

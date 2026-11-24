@@ -1,0 +1,243 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SEMGREP_SEND_METRICS: "off"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  IMAGE: devsecops-demo:ci
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Lint and test
+        run: make install-dev lint test
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          bash scripts/install-scanners.sh gitleaks
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Gitleaks
+        run: make secrets
+
+      - name: Upload SARIF
+        if: ${{ !cancelled() && hashFiles('build/gitleaks.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/gitleaks.sarif
+          category: gitleaks
+
+  sast:
+    name: sast
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install SAST tools
+        run: bash scripts/install-scanners.sh sast
+
+      - name: Semgrep and Bandit
+        run: make sast
+
+      - name: Upload Semgrep SARIF
+        if: ${{ !cancelled() && hashFiles('build/semgrep.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/semgrep.sarif
+          category: semgrep
+
+  sca:
+    name: sca
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install SCA tools
+        run: |
+          bash scripts/install-scanners.sh trivy sca
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: pip-audit and Trivy fs
+        run: make sca
+
+      - name: Upload Trivy filesystem SARIF
+        if: ${{ !cancelled() && hashFiles('build/trivy-fs.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/trivy-fs.sarif
+          category: trivy-fs
+
+  iac:
+    name: iac
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install IaC tools
+        run: |
+          bash scripts/install-scanners.sh hadolint trivy iac
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Hadolint, Checkov, Trivy config
+        run: make iac
+
+      - name: Upload Hadolint SARIF
+        if: ${{ !cancelled() && hashFiles('build/hadolint.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/hadolint.sarif
+          category: hadolint
+
+      - name: Upload Checkov SARIF
+        if: ${{ !cancelled() && hashFiles('build/checkov-docker/results_sarif.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/checkov-docker/results_sarif.sarif
+          category: checkov-dockerfile
+
+      - name: Upload Checkov GitHub Actions SARIF
+        if: ${{ !cancelled() && hashFiles('build/checkov-gha/results_sarif.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/checkov-gha/results_sarif.sarif
+          category: checkov-github-actions
+
+      - name: Upload Trivy config SARIF
+        if: ${{ !cancelled() && hashFiles('build/trivy-config.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/trivy-config.sarif
+          category: trivy-config
+
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install image scanners
+        run: |
+          bash scripts/install-scanners.sh trivy syft
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build image
+        run: make image-build
+
+      - name: Trivy image report
+        run: make image-report
+
+      - name: Trivy image gate and SBOM
+        run: make image-scan sbom
+
+      - name: ZAP baseline
+        run: make dast
+
+      - name: Upload SBOM and ZAP report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-reports
+          path: |
+            build/sbom-trivy.cdx.json
+            build/sbom-syft.cdx.json
+            build/zap-baseline.json
+            build/zap-baseline.html
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Trivy image SARIF
+        if: ${{ !cancelled() && hashFiles('build/trivy-image.sarif') != '' }}
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@915412ff23e8b7659517e607487dbeae018f2934 # v4.39.5
+        with:
+          sarif_file: build/trivy-image.sarif
+          category: trivy-image

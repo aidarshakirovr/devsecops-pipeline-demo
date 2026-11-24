@@ -1,0 +1,8 @@
+# pluginId	threshold	reason
+# FAIL turns a matching alert into a hard gate. Without -I, WARN also fails the scan.
+10020	FAIL	Missing clickjacking protection must fail the build
+10021	FAIL	Missing X-Content-Type-Options must fail the build
+10038	FAIL	Missing Content-Security-Policy must fail the build
+10063	FAIL	Missing Permissions-Policy must fail the build
+90004	FAIL	Missing Cross-Origin-Resource-Policy must fail the build
+10049	IGNORE	Cache-Control no-store is intentional for this API
