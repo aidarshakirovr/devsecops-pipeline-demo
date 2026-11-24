@@ -72,7 +72,7 @@ flowchart TD
 - **pip-audit** и **Trivy fs** — зависимости из lock-файла `requirements.txt`, который собран `pip-compile` из `requirements.in`. В фикстуре закреплён `PyYAML==5.3.1`.
 - **hadolint, Checkov, Trivy config** — Dockerfile боевого образа и, для Checkov, сами workflow. Учебный Dockerfile: `python:latest`, `MAINTAINER`, `USER root`, `sudo`, `ADD`, `EXPOSE 22`.
 - **Trivy image** — CVE в собранном образе. SBOM пишут Trivy и Syft в CycloneDX JSON, это артефакт, не отдельный fail-гейт.
-- **ZAP baseline** — пассивное сканирование поднятого контейнера. Образ сканера закреплён по digest `sha256:9624669…` (тег 2.17.0). Хук перед пауком запрашивает `/`, `/health`, `/items`, `/openapi.json` и импортирует OpenAPI, потому что с `/` на эти маршруты нет ссылок. Правила в `security/zap/rules.tsv`. Контейнер сканера запускается от `$(id -u):$(id -g)`, домашний каталог ZAP смонтирован в `build/zap-home`.
+- **ZAP baseline** — пассивное сканирование поднятого контейнера. Образ сканера закреплён по digest `sha256:9624669…` (тег 2.17.0). Хук перед пауком запрашивает `/`, `/health`, `/items`, `/openapi.json` и импортирует OpenAPI, потому что с `/` на эти маршруты нет ссылок. Правила в `security/zap/rules.tsv`. Контейнер сканера запускается от `$(id -u):$(id -g)`, домашний каталог ZAP смонтирован в `build/zap-home`, рабочий каталог — `/zap/wrk`. Если этого uid нет в образе, он дописывается во временный `/etc/passwd`: иначе Java не стартует (так упал прогон GitHub Actions от uid раннера).
 
 ## Безопасность самого CI
 

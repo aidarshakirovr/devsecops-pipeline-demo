@@ -16,12 +16,31 @@ ZAP_IMAGE="${ZAP_IMAGE:-ghcr.io/zaproxy/zaproxy@sha256:9624669db72f54d86c4b46a70
 
 mkdir -p "${ROOT}/build/zap-home"
 rm -f "${ROOT}/build/${REPORT_JSON}" "${ROOT}/build/${REPORT_HTML}"
+
+# Java refuses to start when the uid is missing from /etc/passwd.
+# GitHub-hosted runners are not the image user, so register the caller.
+PASSWD="${ROOT}/build/zap-passwd"
+GROUP="${ROOT}/build/zap-group"
+docker run --rm --entrypoint cat "${ZAP_IMAGE}" /etc/passwd > "${PASSWD}"
+docker run --rm --entrypoint cat "${ZAP_IMAGE}" /etc/group > "${GROUP}"
+CALLER_UID="$(id -u)"
+CALLER_GID="$(id -g)"
+if ! grep -q "^[^:]*:[^:]*:${CALLER_UID}:" "${PASSWD}"; then
+  printf 'runner:x:%s:%s::/home/zap:/usr/sbin/nologin\n' "${CALLER_UID}" "${CALLER_GID}" >> "${PASSWD}"
+fi
+if ! grep -q "^[^:]*:[^:]*:${CALLER_GID}:" "${GROUP}"; then
+  printf 'runner:x:%s:\n' "${CALLER_GID}" >> "${GROUP}"
+fi
+
 docker run --rm \
   --network "${ZAP_NETWORK}" \
-  --user "$(id -u):$(id -g)" \
+  --user "${CALLER_UID}:${CALLER_GID}" \
+  -w /zap/wrk \
   -e HOME=/home/zap \
   -e ZAP_PATHS="${ZAP_PATHS}" \
   -e ZAP_OPENAPI="${ZAP_OPENAPI}" \
+  -v "${PASSWD}:/etc/passwd:ro" \
+  -v "${GROUP}:/etc/group:ro" \
   -v "${ROOT}/build/zap-home:/home/zap" \
   -v "${ROOT}/build:/zap/wrk:rw" \
   -v "${ROOT}/security/zap:/zap/config:ro" \
