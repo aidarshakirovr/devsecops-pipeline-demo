@@ -1,0 +1,2 @@
+# Intentional vulnerable pin for the demo gate. Not installed by CI and not copied into the image.
+PyYAML==5.3.1

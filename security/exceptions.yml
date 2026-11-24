@@ -1,0 +1,28 @@
+version: 1
+policy:
+  fail_on:
+    - HIGH
+    - CRITICAL
+  secrets: any finding fails the secrets gate
+exceptions:
+  - id: EX-001
+    tool: gitleaks
+    subject: fixtures/vulnerable/**
+    reason: >
+      Учебные секреты лежат только в fixtures/vulnerable и не копируются в образ.
+      Основной gitleaks-гейт исключает этот путь, чтобы ветка с чистым сервисом
+      оставалась зелёной. Прогон make demo-fail и workflow demo-gate-failure
+      сканируют каталог отдельным конфигом без allowlist и должны находить утечку.
+    owner: aidarshakirovr
+    expires: "2027-06-01"
+  - id: EX-002
+    tool: trivy-image
+    subject: unfixed HIGH/CRITICAL in the base image
+    reason: >
+      Гейт образа использует --ignore-unfixed и падает только на HIGH/CRITICAL,
+      для которых уже есть исправленная версия пакета. У debian-пакетов
+      python:3.12-slim-bookworm фиксов нет, и закрыть их из этого репозитория нельзя.
+      Неисправленные CVE не попадают в точечный ignore: их печатает шаг image report.
+      Когда фикс появляется в базе Trivy, сборка начинает падать без новой записи.
+    owner: aidarshakirovr
+    expires: "2027-06-01"

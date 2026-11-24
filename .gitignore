@@ -1,0 +1,16 @@
+.venv/
+.venv-sast/
+.venv-iac/
+venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.pyc
+build/
+*.sarif
+.semgrep/
+*.cdx.json
+.coverage
+htmlcov/
+.trivy/

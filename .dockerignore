@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+.venv-sast
+.venv-iac
+venv
+build
+tests
+fixtures
+security
+scripts
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+*.md
