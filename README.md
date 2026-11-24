@@ -109,7 +109,7 @@ make demo-fail       # учебные находки; код 0 значит, ч�
 
 - ruff: `All checks passed`, format check без правок.
 - pytest: 11 passed. Один warning зависимости: Starlette просит пакет `httpx2` вместо `httpx` в `TestClient`. На результат тестов это не повлияло.
-- gitleaks по уже существующей истории git (на тот момент один коммит, README): `no leaks found`. Отдельно `gitleaks detect --no-git --source fixtures/vulnerable --config .gitleaks.toml` тоже сообщил `no leaks found`: allowlist EX-001 выкидывает этот путь целиком.
+- gitleaks по истории до коммита фикстур (один коммит с README): `no leaks found`. После коммита фикстур повторный `gitleaks detect` прошёл 2 коммита, около 46.8 KB, и снова сообщил `no leaks found`: allowlist EX-001 не даёт учебному секрету завалить основной гейт. Отдельный `gitleaks detect --no-git --source fixtures/vulnerable --config .gitleaks.toml` тоже пустой, потому что этот путь исключён целиком.
 - Bandit по `app`, 61 строка: `No issues identified`, high = 0. Тот же каталог с `-ll` (medium и выше) тоже был пуст.
 - Semgrep `p/python`: 55 правил, 2 файла, 0 findings.
 - pip-audit по `requirements.txt`: `No known vulnerabilities found`. Тот же прогон по `requirements-dev.txt` тоже пустой.
