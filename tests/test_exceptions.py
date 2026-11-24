@@ -38,6 +38,6 @@ def test_image_exception_matches_the_trivy_gate():
 def test_gitleaks_allowlist_matches_documented_exception():
     gitleaks = (ROOT / ".gitleaks.toml").read_text()
     demo = (ROOT / "security" / "gitleaks-demo.toml").read_text()
-    assert "fixtures/vulnerable" in gitleaks
+    assert "^fixtures/vulnerable/" in gitleaks
     assert "EX-001" in gitleaks
     assert "[allowlist]" not in demo

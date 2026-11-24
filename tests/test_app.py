@@ -23,6 +23,8 @@ def test_health_and_security_headers(client: TestClient):
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
+    assert response.headers["cross-origin-resource-policy"] == "same-origin"
+    assert response.headers["permissions-policy"] == "geolocation=(), microphone=(), camera=()"
     assert response.headers["cache-control"] == "no-store"
 
 

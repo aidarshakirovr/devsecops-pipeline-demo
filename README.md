@@ -54,7 +54,7 @@ flowchart TD
 | Гейт | Команда | Когда падает |
 | --- | --- | --- |
 | secrets | gitleaks 8.30.1 | любая утечка |
-| SAST | bandit 1.9.4 `-lll` | severity high |
+| SAST | bandit 1.9.4 `-r app -lll -iii` | только High и только high confidence, и только каталог `app/` |
 | SAST | semgrep 1.186.0 `p/python --severity ERROR --error` | blocking finding |
 | SCA | pip-audit 2.10.1 | любая известная уязвимость в `requirements.txt` |
 | SCA | trivy 0.76.2 `fs --severity HIGH,CRITICAL` | high или critical |
@@ -62,17 +62,17 @@ flowchart TD
 | IaC | checkov 3.4.10 | любой failed check Dockerfile или GitHub Actions |
 | IaC | trivy `config --severity HIGH,CRITICAL` | high или critical |
 | image | trivy `image --ignore-unfixed` | high или critical с фиксом |
-| DAST | ZAP baseline 2.17.0 с `-I` | alert уровня FAIL. WARN сборку не валит |
+| DAST | ZAP baseline 2.17.0 без флага, который игнорирует WARN; `security/zap/rules.tsv` | FAIL и WARN. В rules-файле 10020, 10021, 10038, 10063 и 90004 стоят как FAIL |
 
 ## Что ловит каждый гейт
 
 - **gitleaks** — секреты в истории git. В фикстуре это строка в `fixtures/vulnerable/config.env`, правило `generic-api-key`.
-- **Bandit** — опасные вызовы Python. Фикстура `fixtures/vulnerable/app.py` вызывает `subprocess.run(..., shell=True)`: B602, high/high, CWE-78.
+- **Bandit** — опасные вызовы Python. Основной гейт запускает `bandit -r app -lll -iii`: `-lll` оставляет только severity High, `-iii` только confidence High. Medium, Low и находки с более низкой уверенностью сборку не валят. Сканируется только `app/`, не `tests/` и не `fixtures/`. Учебный `fixtures/vulnerable/app.py` вызывает `subprocess.run(..., shell=True)`: B602, high/high, CWE-78, и его ловит отдельный прогон.
 - **Semgrep** — тот же вызов, правило `python.lang.security.audit.subprocess-shell-true.subprocess-shell-true`, severity blocking. Набор правил `p/python` скачивается в момент запуска, метрики выключены (`SEMGREP_SEND_METRICS=off`).
 - **pip-audit** и **Trivy fs** — зависимости из lock-файла `requirements.txt`, который собран `pip-compile` из `requirements.in`. В фикстуре закреплён `PyYAML==5.3.1`.
 - **hadolint, Checkov, Trivy config** — Dockerfile боевого образа и, для Checkov, сами workflow. Учебный Dockerfile: `python:latest`, `MAINTAINER`, `USER root`, `sudo`, `ADD`, `EXPOSE 22`.
 - **Trivy image** — CVE в собранном образе. SBOM пишут Trivy и Syft в CycloneDX JSON, это артефакт, не отдельный fail-гейт.
-- **ZAP baseline** — пассивное сканирование поднятого контейнера. Образ сканера закреплён по digest `sha256:9624669…` (тег 2.17.0).
+- **ZAP baseline** — пассивное сканирование поднятого контейнера. Образ сканера закреплён по digest `sha256:9624669…` (тег 2.17.0). Хук перед пауком запрашивает `/`, `/health`, `/items`, `/openapi.json` и импортирует OpenAPI, потому что с `/` на эти маршруты нет ссылок. Правила в `security/zap/rules.tsv`. Контейнер сканера запускается от `$(id -u):$(id -g)`, домашний каталог ZAP смонтирован в `build/zap-home`.
 
 ## Безопасность самого CI
 
@@ -94,7 +94,8 @@ make install-dev
 make install-scanners
 make verify          # lint, pytest и гейты без Docker
 make image           # сборка, Trivy, SBOM, ZAP
-make demo-fail       # учебные находки; код 0 значит, что каждый гейт сработал
+make demo-fail       # учебные находки статических гейтов; код 0 значит, что каждый сработал
+make demo-dast       # ZAP по ответу без security-заголовков; код выхода ненулевой
 ```
 
 Отдельные цели: `make lint`, `make test`, `make secrets`, `make sast`, `make sca`, `make iac`, `make image-build`, `make image-report`, `make image-scan`, `make sbom`, `make dast`.
@@ -134,18 +135,28 @@ SBOM CycloneDX 1.7:
 - Trivy: 121 компонент, `build/sbom-trivy.cdx.json`;
 - Syft 1.57.2 без file cataloger: 128 компонентов (library 120, application 7, operating-system 1).
 
-ZAP baseline против контейнера, цель `http://127.0.0.1:8000`, флаг `-I`:
+ZAP baseline чистого образа, 24 ноября 2026, без флага игнорирования WARN. Хук запросил `/health`, `/items` и `/openapi.json`, OpenAPI импортирован. В списке просканированных URL есть `http://127.0.0.1:8000/health`, `/items` и `/items/10`.
 
 ```text
-FAIL-NEW: 0  FAIL-INPROG: 0  WARN-NEW: 2  WARN-INPROG: 0  INFO: 0  IGNORE: 0  PASS: 66
+FAIL-NEW: 0	FAIL-INPROG: 0	WARN-NEW: 0	WARN-INPROG: 0	INFO: 0	IGNORE: 0	PASS: 67
 ```
 
-Код выхода 0. Два предупреждения, которые гейт не валит:
+Код выхода 0. Правило 10049 (`Cache-Control: no-store`) в этом прогоне не сработало и в `rules.tsv` стоит IGNORE, чтобы намеренный запрет кэша не валил сборку, если правило снова станет WARN.
 
-- `Non-Storable Content` [10049];
-- `Cross-Origin-Resource-Policy Header Missing or Invalid` [90004].
+`make demo-dast` против ответа без security-заголовков завершился кодом 1:
 
-Сканер сидит в сетевом пространстве контейнера приложения (`--network container:`), потому что в этой среде маршрутизация между двумя bridge-контейнерами давала timeout, хотя проброшенный на localhost порт отвечал.
+```text
+FAIL-NEW: Missing Anti-clickjacking Header [10020] x 4
+FAIL-NEW: X-Content-Type-Options Header Missing [10021] x 4
+FAIL-NEW: Content Security Policy (CSP) Header Not Set [10038] x 4
+FAIL-NEW: Permissions Policy Header Not Set [10063] x 4
+FAIL-NEW: Cross-Origin-Resource-Policy Header Missing or Invalid [90004] x 9
+WARN-NEW: Server Leaks Version Information via "Server" HTTP Response Header Field [10036] x 4
+FAIL-NEW: 5	FAIL-INPROG: 0	WARN-NEW: 1	WARN-INPROG: 0	INFO: 0	IGNORE: 0	PASS: 61
+DAST gate failed on the insecure response (exit 1)
+```
+
+Сканер сидит в сетевом пространстве целевого контейнера (`--network container:`), потому что в этой среде маршрутизация между двумя bridge-контейнерами давала timeout, хотя проброшенный на localhost порт отвечал.
 
 ## Пример срабатывания
 
@@ -189,10 +200,11 @@ Trivy config: `Failures: 5 (HIGH: 3, CRITICAL: 2)`, в том числе `DS-001
 ## Ограничения
 
 - Cosign keyless не подключён: нет push образа и нет `id-token: write`.
-- Bandit не отдаёт SARIF в версии 1.9.4, поэтому в code scanning попадает Semgrep.
+- Bandit 1.9.4 не пишет SARIF, в code scanning уходит Semgrep. Гейт смотрит только `app/` и только находки High/High (`-lll -iii`).
+- Зависимости сканеров закреплены lock-файлами с хэшами: `requirements-sast.txt`, `requirements-sca.txt`, `requirements-iac.txt` (`pip-compile --generate-hashes`). `scripts/install-scanners.sh` ставит их с `--require-hashes`. Локально эти три установки прошли.
 - Загрузка SARIF в code scanning на PR может не сработать, пока workflow ещё не лежит в `main`. Шаг загрузки помечен `continue-on-error`, сам гейт от этого не зависит. Итог смотреть в логе job на GitHub.
 - У базового Debian-образа 101 high/critical без фикса. Гейт их не валит из-за EX-002. Табличный отчёт `make image-report` их показывает.
-- ZAP с `-I` не валит сборку на двух WARN выше. High не было.
+- DAST валит сборку и на FAIL, и на WARN. В `rules.tsv` пять правил заголовков переведены в FAIL, 10049 оставлен IGNORE.
 - Trivy config не разбирает GitHub Actions workflow. Их смотрит Checkov и тест на SHA и права.
 - Правила Semgrep `p/python` приезжают из registry во время скана, состав может сдвинуться.
 - `pip-audit` строже политики high/critical: падает на любой известной уязвимости. Сейчас в lock-файле их нет.

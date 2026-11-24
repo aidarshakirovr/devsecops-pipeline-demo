@@ -29,3 +29,6 @@ jobs:
 
       - name: Show gate failures on vulnerable fixtures
         run: make demo-fail
+
+      - name: DAST gate fails on an insecure response
+        run: make demo-dast

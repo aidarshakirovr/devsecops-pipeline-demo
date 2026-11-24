@@ -48,6 +48,31 @@ def test_image_build_does_not_copy_fixtures():
     assert "USER 10001" in dockerfile
 
 
+def test_checkov_sarif_upload_uses_the_dockerfile_report():
+    ci = (WORKFLOWS / "ci.yml").read_text()
+    assert "build/checkov-docker/results_sarif.sarif" in ci
+    assert "build/checkov/results_sarif.sarif" not in ci
+
+
+def test_dast_gate_can_fail_and_runs_as_the_caller():
+    dast = (ROOT / "scripts" / "dast.sh").read_text()
+    baseline = (ROOT / "scripts" / "zap_baseline.sh").read_text()
+    rules = (ROOT / "security" / "zap" / "rules.tsv").read_text()
+    assert "-I" not in dast
+    assert "-I" not in baseline
+    assert "chmod 0777" not in dast
+    assert "--user root" not in baseline
+    assert "id -u" in baseline
+    assert "\tFAIL\t" in rules
+
+
+def test_scanner_locks_are_hashed():
+    script = (ROOT / "scripts" / "install-scanners.sh").read_text()
+    assert "--require-hashes" in script
+    for name in ("requirements-sast.txt", "requirements-sca.txt", "requirements-iac.txt"):
+        assert "--hash=sha256:" in (ROOT / name).read_text()
+
+
 def test_sca_gate_targets_production_requirements_only():
     makefile = (ROOT / "Makefile").read_text()
     assert "trivy fs --scanners vuln --severity HIGH,CRITICAL" in makefile

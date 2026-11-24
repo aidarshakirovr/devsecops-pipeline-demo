@@ -5,4 +5,4 @@ useDefault = true
 
 [allowlist]
 description = "EX-001: fixtures/vulnerable is scanned by make demo-fail, not the main gate"
-paths = ['''fixtures/vulnerable''']
+paths = ['''^fixtures/vulnerable/''']

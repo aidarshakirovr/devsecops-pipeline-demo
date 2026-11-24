@@ -12,7 +12,7 @@ export PIP_DISABLE_PIP_VERSION_CHECK := 1
 .DEFAULT_GOAL := help
 
 .PHONY: help install install-dev install-scanners lint test verify secrets sast sca iac \
-	image-build image-report image-scan sbom dast image demo-fail
+	image-build image-report image-scan sbom dast image demo-fail demo-dast
 
 help:
 	@printf '%s\n' \
@@ -25,7 +25,8 @@ help:
 	  'make sbom              CycloneDX from Trivy and Syft' \
 	  'make dast              ZAP baseline against the running image' \
 	  'make image             build, scan, SBOM, DAST' \
-	  'make demo-fail         reproduce gate failures on the vulnerable fixtures'
+	  'make demo-fail         reproduce static gate failures on the vulnerable fixtures' \
+	  'make demo-dast         ZAP baseline against an insecure response; exits non-zero'
 
 install-dev:
 	$(PYTHON) -m venv .venv
@@ -97,3 +98,6 @@ image: image-build image-report image-scan sbom dast
 
 demo-fail:
 	bash scripts/demo-fail.sh
+
+demo-dast:
+	bash scripts/demo_dast.sh

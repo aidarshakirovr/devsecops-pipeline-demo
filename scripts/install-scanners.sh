@@ -92,7 +92,7 @@ install_python_requirements() {
   local req="$1"
   local venv_dir="$2"
   ensure_venv "${venv_dir}"
-  "${venv_dir}/bin/pip" install --disable-pip-version-check --upgrade -r "${ROOT}/${req}"
+  "${venv_dir}/bin/pip" install --disable-pip-version-check --require-hashes -r "${ROOT}/${req}"
 }
 
 targets=("$@")
